@@ -1,6 +1,7 @@
 import re
 import pymysql
-
+import shutil
+import os
 
 class Config(object):
     def __init__(self):
@@ -12,7 +13,7 @@ class Config(object):
         self.__match_config()
 
     def scan(self):
-        # TODO: 整合所有用来扫描的方法，最后返回扫描结果
+        # TODO: 整合所有用来扫描的方法，目的是给Config类的属性赋值
         self.__match_md_path()
         self.__collect_all_md_attribute()
 
@@ -41,17 +42,7 @@ class Config(object):
         path = self.__conf_dict['dir_path']
         print("[*] 正在扫描{}中含有的markdown文件....".format(path))
         files_info = os.walk(path)
-        # try:
-        #     files_info = os.walk(path)
-        # except:
-        #     print("路径有误")
-        #     return
-        # for root, dirs, files in files_info:
         for root, dirs, files in files_info:
-            # print(root)
-            # print(dirs)
-            # print(files)
-            # print("============")
             for file in files:
                 if file[-3:] == '.md':
                     self.__files_path_list.append(root + '\\' + file)
@@ -88,8 +79,6 @@ class Config(object):
                 second_attr = re.search(common_pattern, line).group(2)
             except:
                 second_attr = ""
-            # print("第一个参数为:"+first_attr)
-            # print("第二个参数为："+second_attr)
             if tags_status == 1 and line[0:3] == '  -':
                 tags.append(re.search(special_pattern, line).group(1))
             else:
@@ -106,8 +95,6 @@ class Config(object):
                 title = second_attr
             if first_attr == 'author':
                 author = second_attr
-            # print(tags)
-            # print(categories)
         if title is not "":
             md_attributes_list.append(["title", title])
             md_attributes_list.append(["author", author])
@@ -147,11 +134,22 @@ class Config(object):
 
 
 class Db(Config):
+    """
+    参数说明：
+    __conn : 数据库连接对象
+    __conn_cursor : 数据库操作游标
+    __current_db_info_list : 存储当前数据库中的文章信息。每个文章均为列表中的一个元素，其属性均以字典形式存储
+    """
+
     def conn(self):
         # TODO: 创建数据库连接__conn_obj
-        print("[*] 正在建立数据库连接....")
         config = self.get_config()
-        self.__conn = pymysql.connect(config['host'], config['username'], config['password'], config['dbname'])
+        print("[*] 正在建立数据库连接....")
+        try:
+            self.__conn = pymysql.connect(config['host'], config['username'], config['password'], config['dbname'])
+        except:
+            print("[×] 数据库连接失败")
+            return False
         # 生成操作游标
         self.__conn_cursor = self.__conn.cursor()
         if self.__conn_cursor is not None:
@@ -244,9 +242,6 @@ class Db(Config):
         except:
             print("[×] 创建数据表categories失败")
 
-    def test(self):
-        print(self.get_all_md_path())
-
     def store_attribute(self):
         # TODO: 存储读取到的md文件属性信息
         md_attribute_items = self.get_all_md_attribute()
@@ -307,7 +302,7 @@ class Db(Config):
         categories_info_list = []
         get_articles = "select id,title,author from articles"
         articles_data = self.no_need_commit_sql(get_articles, False)
-        for article in articles_data:
+        for article in articles_data :
             article = list(article)
             article_id = article[0]
             get_tags = "select tag_name from tags where belong_to = {}".format(article_id)
@@ -329,5 +324,76 @@ class Db(Config):
 
     def change_file(self):
         # TODO: 将md文件的属性修改为数据库中记录的属性
-        print("[*] 正在修改中....")
-        
+        title_pattern = r"(^title:\s)(.*)"
+        author_pattern = r"^(^author:\s)(.*)"
+        tags_pattern = r"^tags:"
+        categories_pattern = r"^categories:"
+        child_pattern = r"\s\s-\s"  # 用于匹配tags和categories的子目录
+        changed_file_data = ""  # 存放更改后的文件内容
+        if self.get_all_md_path() == []:
+            print('[×] 未检测到文件路径信息，请扫描后再进行修改操作')
+            return False
+        print("[*] 正在备份原文件....")
+        file_count = 0
+        for md_file in self.get_all_md_path():
+            try:
+                shutil.copy(md_file, md_file+".bak")
+                print("[√] 备份{}成功！".format(md_file))
+                file_count += 1
+            except:
+                print("[×] 备份{}失败".format(md_file))
+                return False
+        print("[√] 文件备份已完成，本次共备份{}个文件".format(file_count))
+        print("[*] 开始修改文件")
+        for md_file in self.get_all_md_path():
+            print("[*] 开始执行对{}的操作".format(md_file))
+            try:
+                file = open(md_file, 'r', encoding='utf8')
+            except:
+                print("[×] 打开{}失败".format(md_file))
+                return False
+            ending_flag = False  # 用于判断md文件的属性部分是否结束。结束为True，反之为False
+            # 获取文章标题
+            title = re.search(title_pattern, file.readline())
+            title_exist = False  # 标志该文件中的title是否存在于数据库中
+            # 遍历存储当前数据库文章信息的数组
+            for article_info in self.__current_db_info_list:
+                # 如果文章中存在此title，则进行下一步操作，否则跳出该次循环
+                if article_info['title'] == title:
+                    title_exist = True
+                    # 遍历该文件的每一行
+                    for line in file.readlines():
+                        # 如果还未遍历完文件的所有属性，则继续
+                        if not ending_flag:
+                            # 如果该行控制title
+                            if re.match(title_pattern, line)[1] == 'title: ':
+                                # 将‘title: ’后的字段替换为数据库中存放的title，后面的都一样，我就不啰嗦了
+                                changed_file_data += line.replace(re.match(title_pattern, line)[2], article_info['title'])
+                            elif re.match(author_pattern, line)[1] == 'author: ':
+                                changed_file_data += line.replace(re.match(author_pattern, line)[2], article_info['author'])
+                            # 如果匹配到tags，则遍历数据库中tags字段信息并进行插入
+                            elif re.match(tags_pattern, line) == 'tags:':
+                                changed_file_data += line
+                                for child_tag in article_info['tags']:
+                                    changed_file_data += '  - ' + child_tag + '\n'
+                            # 如果匹配到categories，则遍历数据库中categories字段信息并进行插入
+                            elif re.match(categories_pattern, line) == 'categories:':
+                                changed_file_data += line
+                                for child_category in article_info['categories']:
+                                    changed_file_data += '  - ' + child_category + '\n'
+                            # 如果扫描到"---"，则说明文件属性部分已结束，停止扫描
+                            elif line[0:3] == '---':
+                                ending_flag = True
+                        # 已遍历完文件属性，接下来将所有行加入changed_file_data即可
+                        else:
+                            changed_file_data += line
+                        # 将改动写入该文件中
+                        file.write(changed_file_data)
+                        file.close()
+                        print('[√] 已完成对{}的更改'.format(md_file))
+             # 如果数据库记录中不存在该文件的title则报错并退出
+            if not title_exist:
+                print("[×] 在数据库中没有找到该文章的相关信息")
+                return False
+        print("[SUCCESS] 所有文件均已处理完毕")
+
