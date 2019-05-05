@@ -3,10 +3,29 @@ import pymysql
 import shutil
 import os
 
+
 class Config(object):
+    """
+    属性说明：
+    __conf_dict : 存储config.ini中的配置信息
+    __files_path_list : 存储被扫描到的md文件的绝对路径
+    __md_attributes_dict : 存储扫描到的单个md文件的属性
+    __files_all_attribute_list : 存储所有md文件的属性
+
+    方法说明：
+    __init__() : 初始化Config类的属性并获取配置文件信息
+    scan() : 给Config类的属性赋值
+    __match_config() : 获取配置文件信息
+    __match_md_path() : 获取指定文件夹下md文件的绝对路径
+    __match_md_attribute() : 获取md文件的属性（title、tags等）
+    __collect_all_md_attribute() : 获取全部md文件的属性
+    get_config() : 返回__conf_list
+    get_all_md_path() : 返回__files_path_list
+    get_all_md_attribute() : 获取__files_all_attribute_list
+    """
     def __init__(self):
         # TODO:初始化所需属性
-        self.__conf_dict = {}  # 存储config中config.ini中的配置信息
+        self.__conf_dict = {}  # 存储config.ini中的配置信息
         self.__files_path_list = []  # 存储扫描到的md文件绝对路径
         self.__md_attributes_dict = {}  # 存储扫描到的单个md文件的属性
         self.__files_all_attribute_list = []  # 存储所有md文件的属性
@@ -135,10 +154,19 @@ class Config(object):
 
 class Db(Config):
     """
-    参数说明：
+    属性说明：
     __conn : 数据库连接对象
     __conn_cursor : 数据库操作游标
     __current_db_info_list : 存储当前数据库中的文章信息。每个文章均为列表中的一个元素，其属性均以字典形式存储
+
+    方法说明：
+    conn() : 连接数据库
+    no_need_commit_sql() : 执行无需调用commit方法的sql语句，例如创建、查询
+    need_commit_sql() : 执行需调用commit方法的sql语句，例如插入、更新、删除
+    reset_db_table() : 重置程序相关数据表
+    store_attribute() : 存储读取到的md文件属性信息
+    get_current_data() : 读取当前数据库中的文章信息
+    change_file() : 将md文件的属性更改为数据库中记录的属性
     """
 
     def conn(self):
@@ -296,13 +324,13 @@ class Db(Config):
         print("[SUCCESS] 完成数据存储任务，本次共存储{}个文件的信息".format(file_count))
 
     def get_current_data(self):
-        # TODO: 存储当前数据库中的文章信息
+        # TODO: 读取当前数据库中的文章信息
         self.__current_db_info_list = []  # 存储当前数据库中的文章信息。每个文章的属性均以字典形式存储
         tags_info_list = []
         categories_info_list = []
         get_articles = "select id,title,author from articles"
         articles_data = self.no_need_commit_sql(get_articles, False)
-        for article in articles_data :
+        for article in articles_data:
             article = list(article)
             article_id = article[0]
             get_tags = "select tag_name from tags where belong_to = {}".format(article_id)
