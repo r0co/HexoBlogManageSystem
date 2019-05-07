@@ -221,10 +221,9 @@ class Db(Config):
     def change_file(self):
         # TODO: 将md文件的属性修改为数据库中记录的属性
         title_pattern = r"(^title:\s)(.*)"
-        author_pattern = r"^(^author:\s)(.*)"
-        tags_pattern = r"^tags:"
-        categories_pattern = r"^categories:"
-        # child_pattern = r"\s\s-\s"  # 用于匹配tags和categories的子目录
+        other_pattern = r"(.*):\s(.*)"  # 用于获取可能出现的标签
+        commen_list = ['title', 'author', 'tags', 'categories']  # 设置普通标签
+        other_dict = {}  # 存放不存在于commen_list中的标签
         changed_file_data = ""  # 存放更改后的文件内容
         all_files_path = self.get_all_md_path()
         if all_files_path == []:
@@ -246,7 +245,6 @@ class Db(Config):
                 return False
         print("[√] 文件备份已完成，本次共备份{}个文件".format(file_count))
         print("[*] 开始修改文件")
-        # 读取备份文件内容，修改后写入原文件
         for md_file in all_files_path:
             print("[*] 开始执行对{}的操作".format(md_file))
             try:
@@ -255,84 +253,75 @@ class Db(Config):
             except:
                 print("[×] 打开{}失败".format(md_file+".bak"))
                 return False
-            ending_flag = False  # 用于判断md文件的属性部分是否结束。结束为True，反之为False
             # 获取文章标题
             try:
                 title = re.search(title_pattern, bak_file.readline()).group(2)
             except:
                 print("[×] 未找到{}的title字段，自动跳过该文件".format(md_file))
                 continue
+            title_exist = False  # 标志该文件中的title是否存在于数据库中
+            # 遍历存储当前数据库文章信息的数组并将所有内容存储在changed_file_data中(只存储title,author,tags,categories)
+            for article_info in self.__current_db_info_list:
+                # 如果文章中存在此title，则进行下一步操作，否则跳出该次循环
+                title_exist = True
+                if article_info['title'] == title:
+                    # 添加title
+                    changed_file_data += "title: {}\n".format(article_info['title'])
+                    # 添加author
+                    changed_file_data += "author: {}\n".format((article_info['author']))
+                    # 添加tags
+                    changed_file_data += "tags:\n"
+                    for tag in article_info['tags']:
+                        changed_file_data += "  - {}\n".format(tag[0])
+                    # 添加categories
+                    changed_file_data += "categories:\n"
+                    for category in article_info['categories']:
+                        changed_file_data += "  - {}\n".format(category[0])
+            origin_attribute_end = False  # 标志源文件属性部分是否结束，默认未结束
+            store_other_attribute = False  # 标志源文件其他属性部分是否已存储，默认未存储
+            # 遍历备份文件中的内容，获取其他标签
+            for line in bak_file:
+                # 判断属性部分是否结束
+                if origin_attribute_end is False:
+                    if line[0:3] == "---":
+                        origin_attribute_end = True
+                # 如果属性部分未结束
+                if origin_attribute_end is False:
+                    try:
+                        key = re.search(other_pattern, line).group(1)
+                    except:
+                        key = ""
+                    try:
+                        value = re.search(other_pattern, line).group(2)
+                    except:
+                        value = ""
+                    # 若匹配到其他标签，则将其标签和值存到字典中
+                    if key not in commen_list and key != "":
+                        other_dict[key] = value
+                    # 结束本次循环以方便其他标签的收集
+                    continue
+                # 若还未存储其他标签
+                if store_other_attribute is False:
+                    store_other_attribute = True
+                    for key, value in other_dict.items():
+                        changed_file_data += "{}: {}\n".format(key, value)
+                # 存储剩余所有内容
+                changed_file_data += line
+            # 关闭备份文件
+            bak_file.close()
+            # 打开源文件
             try:
-                # 写入模式打开原文件
                 origin_file = open(md_file, 'w', encoding='utf8')
             except:
                 print("[×] 打开{}失败".format(md_file))
                 return False
-            title_exist = False  # 标志该文件中的title是否存在于数据库中
-            # 遍历存储当前数据库文章信息的数组
-            for article_info in self.__current_db_info_list:
-                # 如果文章中存在此title，则进行下一步操作，否则跳出该次循环
-                if article_info['title'] == title:
-                    title_exist = True
-                    # 遍历该文件的每一行
-                    for line in bak_file.readlines():
-                        # 如果还未遍历完文件的所有属性，则继续
-                        if ending_flag is False:
-                            # 为防止正则匹配报错，在此进行异常处理
-                            # 只处理title:、tags:等
-                            ## 匹配title
-                            try:
-                                matched_title = re.match(title_pattern, line)[1]
-                            except:
-                                matched_title = ""
-                            ## 匹配author
-                            try:
-                                matched_author = re.match(author_pattern, line)[1]
-                            except:
-                                matched_author = ""
-                            ## 匹配tags
-                            try:
-                                matched_tags = re.match(tags_pattern, line)[1]
-                            except:
-                                matched_tags = ""
-                            ## 匹配categories
-                            try:
-                                matched_categories = re.match(categories_pattern, line)[1]
-                            except:
-                                matched_categories = ""
-
-                            # 如果该行控制title
-                            if matched_title == 'title: ':
-                                # 将‘title: ’后的字段替换为数据库中存放的title，后面的都一样
-                                changed_file_data += line.replace(re.match(title_pattern, line)[2], article_info['title'])
-                            elif matched_author == 'author: ':
-                                changed_file_data += line.replace(re.match(author_pattern, line)[2], article_info['author'])
-                            # 如果匹配到tags，则遍历数据库中tags字段信息并进行插入
-                            elif matched_tags == 'tags:':
-                                changed_file_data += line
-                                for child_tag in article_info['tags']:
-                                    changed_file_data += '  - ' + child_tag + '\n'
-                            # 如果匹配到categories，则遍历数据库中categories字段信息并进行插入
-                            elif matched_categories == 'categories:':
-                                changed_file_data += line
-                                for child_category in article_info['categories']:
-                                    changed_file_data += '  - ' + child_category + '\n'
-                            # 如果扫描到"---"，则说明文件属性部分已结束，停止扫描
-                            elif line[0:3] == '---':
-                                ending_flag = True
-                        # 已遍历完文件属性，接下来将所有行加入changed_file_data即可
-                        else:
-                            changed_file_data += line
-                    # 遍历完毕，关闭只读的备份文件
-                    bak_file.close()
-                    # 将改动写入源文件中
-                    try:
-                        origin_file.write(changed_file_data)
-                    except:
-                        print("[×] 文件写入失败")
-                    origin_file.close()
-                    print('[√] 已完成对{}的更改'.format(md_file))
-             # 如果数据库记录中不存在该文件的title则报错并退出
+            # 写入内容
+            try:
+                origin_file.write(changed_file_data)
+            except:
+                print("[×] 更改{}失败".format(md_file))
+            origin_file.close()
+            print('[√] 已完成对{}的更改'.format(md_file))
             if not title_exist:
                 print("[×] 在数据库中没有找到该文章的相关信息")
         print("[SUCCESS] 所有文件均已处理完毕")
