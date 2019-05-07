@@ -141,9 +141,10 @@ class Config(object):
 
     def get_all_md_path(self):
         # TODO: 为子类提供配置文件指定路径下所有.md文件的路径信息
-        self.get_config()
         self.__match_md_path()
         return self.__files_path_list
 
     def get_all_md_attribute(self):
+        self.get_all_md_path()
+        self.__collect_all_md_attribute()
         return self.__files_all_attribute_list

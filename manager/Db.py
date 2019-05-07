@@ -37,6 +37,11 @@ class Db(Config):
             print("[√] 数据库连接成功")
 
     def no_need_commit_sql(self, sentence, prompt=True):
+        """
+        :param sentence: 需执行的sql语句
+        :param prompt: 为True则输出提示，否则不输出提示
+        :return:
+        """
         # TODO: 执行无需调用commit方法的sql语句
         try:
             self.__conn_cursor.execute(sentence)
@@ -52,6 +57,11 @@ class Db(Config):
             return None
 
     def need_commit_sql(self, sentence, prompt=True):
+        """
+        :param sentence: 需执行的sql语句
+        :param prompt: 为True则输出提示，否则不输出提示
+        :return:
+        """
         # TODO: 执行需要调用commit方法的sql语句
         try:
             self.__conn_cursor.execute(sentence)
@@ -126,7 +136,7 @@ class Db(Config):
     def store_attribute(self):
         # TODO: 存储读取到的md文件属性信息
         md_attribute_items = self.get_all_md_attribute()
-        if md_attribute_items is not []:
+        if md_attribute_items != []:
             print("[√] 文件扫描已完成")
         else:
             print("[×] 文件扫描出现异常，无法获取markdown文件信息")
@@ -162,7 +172,7 @@ class Db(Config):
                 '{tag_name}','{belong_to}'
                 )
                 """.format(tag_name=tag, belong_to=article_id)
-                self.need_commit_sql(insert_into_tags, False)
+                self.need_commit_sql(insert_into_tags)
             print("[*] 正在向categories表中插入第{item_count}个文件的信息....".format(item_count=item_count))
             for category in categories:
                 insert_into_categories = """
@@ -171,13 +181,14 @@ class Db(Config):
                 '{category_name}','{belong_to}'
                 )
                 """.format(category_name=category, belong_to=article_id)
-                self.need_commit_sql(insert_into_categories, False)
+                self.need_commit_sql(insert_into_categories)
             print("[√] 第{}个文件的内容已全部存入数据库".format(item_count))
             file_count += 1
         print("[SUCCESS] 完成数据存储任务，本次共存储{}个文件的信息".format(file_count))
 
     def get_current_data(self):
         # TODO: 读取当前数据库中的文章信息
+        print("[*] 正在获取数据库中存储的信息....")
         self.__current_db_info_list = []  # 存储当前数据库中的文章信息。每个文章的属性均以字典形式存储
         tags_info_list = []
         categories_info_list = []
@@ -199,9 +210,13 @@ class Db(Config):
             total_info['author'] = article[2]
             total_info['tags'] = tags_info_list
             total_info['categories'] = categories_info_list
-            print("查看当前状态:")
-            print(total_info)
             self.__current_db_info_list.append(total_info)
+            if self.__current_db_info_list != []:
+                print("[√] 获取信息成功")
+                return True
+            else:
+                print("[×] 获取信息失败")
+                return False
 
     def change_file(self):
         # TODO: 将md文件的属性修改为数据库中记录的属性
@@ -209,14 +224,19 @@ class Db(Config):
         author_pattern = r"^(^author:\s)(.*)"
         tags_pattern = r"^tags:"
         categories_pattern = r"^categories:"
-        child_pattern = r"\s\s-\s"  # 用于匹配tags和categories的子目录
+        # child_pattern = r"\s\s-\s"  # 用于匹配tags和categories的子目录
         changed_file_data = ""  # 存放更改后的文件内容
-        if self.get_all_md_path() == []:
-            print('[×] 未检测到文件路径信息，请扫描后再进行修改操作')
-            return False
+        all_files_path = self.get_all_md_path()
+        if all_files_path == []:
+            print('[×] 未检测到文件路径信息')
+            return
+        # 如果数据库信息获取失败则退出
+        if self.get_current_data() is False:
+            print("[×] 获取数据库信息失败")
+            return
         print("[*] 正在备份原文件....")
         file_count = 0
-        for md_file in self.get_all_md_path():
+        for md_file in all_files_path:
             try:
                 shutil.copy(md_file, md_file+".bak")
                 print("[√] 备份{}成功！".format(md_file))
@@ -226,16 +246,28 @@ class Db(Config):
                 return False
         print("[√] 文件备份已完成，本次共备份{}个文件".format(file_count))
         print("[*] 开始修改文件")
-        for md_file in self.get_all_md_path():
+        # 读取备份文件内容，修改后写入原文件
+        for md_file in all_files_path:
             print("[*] 开始执行对{}的操作".format(md_file))
             try:
-                file = open(md_file, 'r', encoding='utf8')
+                # 只读模式打开备份文件,为防止修改失败时损坏源文件，源文件将在后边打开
+                bak_file = open(md_file+'.bak', 'r', encoding='utf8')
             except:
-                print("[×] 打开{}失败".format(md_file))
+                print("[×] 打开{}失败".format(md_file+".bak"))
                 return False
             ending_flag = False  # 用于判断md文件的属性部分是否结束。结束为True，反之为False
             # 获取文章标题
-            title = re.search(title_pattern, file.readline())
+            try:
+                title = re.search(title_pattern, bak_file.readline()).group(2)
+            except:
+                print("[×] 未找到{}的title字段，自动跳过该文件".format(md_file))
+                continue
+            try:
+                # 写入模式打开原文件
+                origin_file = open(md_file, 'w', encoding='utf8')
+            except:
+                print("[×] 打开{}失败".format(md_file))
+                return False
             title_exist = False  # 标志该文件中的title是否存在于数据库中
             # 遍历存储当前数据库文章信息的数组
             for article_info in self.__current_db_info_list:
@@ -243,22 +275,45 @@ class Db(Config):
                 if article_info['title'] == title:
                     title_exist = True
                     # 遍历该文件的每一行
-                    for line in file.readlines():
+                    for line in bak_file.readlines():
                         # 如果还未遍历完文件的所有属性，则继续
-                        if not ending_flag:
+                        if ending_flag is False:
+                            # 为防止正则匹配报错，在此进行异常处理
+                            # 只处理title:、tags:等
+                            ## 匹配title
+                            try:
+                                matched_title = re.match(title_pattern, line)[1]
+                            except:
+                                matched_title = ""
+                            ## 匹配author
+                            try:
+                                matched_author = re.match(author_pattern, line)[1]
+                            except:
+                                matched_author = ""
+                            ## 匹配tags
+                            try:
+                                matched_tags = re.match(tags_pattern, line)[1]
+                            except:
+                                matched_tags = ""
+                            ## 匹配categories
+                            try:
+                                matched_categories = re.match(categories_pattern, line)[1]
+                            except:
+                                matched_categories = ""
+
                             # 如果该行控制title
-                            if re.match(title_pattern, line)[1] == 'title: ':
-                                # 将‘title: ’后的字段替换为数据库中存放的title，后面的都一样，我就不啰嗦了
+                            if matched_title == 'title: ':
+                                # 将‘title: ’后的字段替换为数据库中存放的title，后面的都一样
                                 changed_file_data += line.replace(re.match(title_pattern, line)[2], article_info['title'])
-                            elif re.match(author_pattern, line)[1] == 'author: ':
+                            elif matched_author == 'author: ':
                                 changed_file_data += line.replace(re.match(author_pattern, line)[2], article_info['author'])
                             # 如果匹配到tags，则遍历数据库中tags字段信息并进行插入
-                            elif re.match(tags_pattern, line) == 'tags:':
+                            elif matched_tags == 'tags:':
                                 changed_file_data += line
                                 for child_tag in article_info['tags']:
                                     changed_file_data += '  - ' + child_tag + '\n'
                             # 如果匹配到categories，则遍历数据库中categories字段信息并进行插入
-                            elif re.match(categories_pattern, line) == 'categories:':
+                            elif matched_categories == 'categories:':
                                 changed_file_data += line
                                 for child_category in article_info['categories']:
                                     changed_file_data += '  - ' + child_category + '\n'
@@ -268,12 +323,16 @@ class Db(Config):
                         # 已遍历完文件属性，接下来将所有行加入changed_file_data即可
                         else:
                             changed_file_data += line
-                        # 将改动写入该文件中
-                        file.write(changed_file_data)
-                        file.close()
-                        print('[√] 已完成对{}的更改'.format(md_file))
+                    # 遍历完毕，关闭只读的备份文件
+                    bak_file.close()
+                    # 将改动写入源文件中
+                    try:
+                        origin_file.write(changed_file_data)
+                    except:
+                        print("[×] 文件写入失败")
+                    origin_file.close()
+                    print('[√] 已完成对{}的更改'.format(md_file))
              # 如果数据库记录中不存在该文件的title则报错并退出
             if not title_exist:
                 print("[×] 在数据库中没有找到该文章的相关信息")
-                return False
         print("[SUCCESS] 所有文件均已处理完毕")

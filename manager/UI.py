@@ -18,15 +18,10 @@ class UI(Db):
         print("\"属性\"即为md文件的title、tags、categories等丨")
         print("=============================================")
         print("-r,--resetdb                - 重置数据库")
-        print("-l,--list                  - 匹配文件夹中包含的md文件")
-        print("-s,--store                  - 将当前扫描结果存入数据库中")
-        print("-a,--auto                   - 自动进行扫描、存储操作")
+        print("-l,--list                   - 扫描并显示配置文件中指定路径下所有的md文件")
+        print("-s,--store                  - 扫描并将所有md文件的信息存入数据库中")
         print("-o,--overwrite              - 将所有md文件的属性更改为数据库中存储的属性")
         print("-h,--help                   - 显示帮助文档")
-
-    def db_conn(self):
-        self.get_config()
-        self.conn()
 
     def main(self, argv):
         try:
@@ -48,25 +43,18 @@ class UI(Db):
             else:
                 # 有指定参数，无需连接
                 conn_flag = False
-        if conn_flag:
-            self.db_conn()
-
+        if conn_flag is True:
+            self.conn()
         # 遍历参数表，执行对应操作
         for opt, arg in opts:
             # 重置数据库
             if opt in ("-r", "--resetdb"):
                 self.reset_db()
-            # 查看所有匹配到的md文件
+            # 显示配置文件中指定路径下所有md文件的绝对路径
             elif opt in ("-l", "--list"):
                 self.get_all_md_path()
             # 存储数据
             elif opt in ("-s", "--store"):
-                self.store_attribute()
-            # 自动执行匹配、存储操作
-            elif opt in ("-a", "--auto"):
-                self.db_conn()
-                self.reset_db()
-                self.scan()
                 self.store_attribute()
             # 执行写入数据操作
             elif opt in ("-o", "--overwrite"):
