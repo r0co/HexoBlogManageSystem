@@ -1,46 +1,29 @@
 # HexoBlogManageSystem
+
 Hexo博客管理系统
 
 ## 功能
 
-提取hexo博客系统中所使用md文件的tag、categories。
+批量更改hexo博客标签及分类
 
-练手作品，大佬们莫笑
+## 使用说明
 
+**目前仅在windows平台上测试成功**
 
-## 开发进程
+下载本项目：
 
-**完成了**：
+`git clone https://github.com/r0co/HexoBlogManageSystem.git`
 
-> Config类
->
-> > 获取配置信息
-> >
-> > 获取指定文件夹下所有md绝对路径的功能
-> >
-> > 获取md文件中的属性
-> >
-> > 获取所有md文件中的属性
-> >
-> > 将当前配置写入文件中
+编辑`config/config.ini`进行数据库及`source/_post`目录路径的配置
 
-> Db类
->
-> > 执行SQL语句
-> >
-> > 重置hexo_manager表
-> >
-> > 将在Config中获取到的所有信息（即存在__files_all_attribute_list中的信息）存入数据库中
-> >
-> > 返回当前数据库信息（列表形式）
+使用`python3 main.py -h`或`python3 main.py --help`获取帮助信息
 
+参数如下：
 
-
-> 优化相关
->
-> > 优化各个类的参数、函数说明
-
-**待开发**：
-
-> UI界面的书写
-
+```
+-r,--resetdb                - 重置数据库
+-l,--list                   - 扫描并显示配置文件中指定路径下所有的md文件
+-s,--store                  - 扫描并将所有md文件的信息存入数据库中
+-o,--overwrite              - 将所有md文件的属性更改为数据库中存储的属性
+-h,--help                   - 显示帮助文档
+```
