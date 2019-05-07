@@ -1,7 +1,7 @@
 # coding=utf8
-import manager
-a = manager.Db()
-a.conn()
-a.scan()
-a.get_current_data()
-a.change_file()
+from manager.UI import UI
+import sys
+
+options = sys.argv[1:]
+manager = UI()
+manager.main(options)
