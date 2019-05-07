@@ -52,6 +52,7 @@ class UI(Db):
                 self.reset_db()
             # 显示配置文件中指定路径下所有md文件的绝对路径
             elif opt in ("-l", "--list"):
+                self.get_config()
                 self.get_all_md_path()
             # 存储数据
             elif opt in ("-s", "--store"):
