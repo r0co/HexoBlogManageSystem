@@ -36,15 +36,16 @@ class Db(Config):
         if self.__conn_cursor is not None:
             print("[√] 数据库连接成功")
 
-    def no_need_commit_sql(self, sentence, prompt=True):
+    def no_need_commit_sql(self, sentence, args_tuple=None, prompt=True):
         """
         :param sentence: 需执行的sql语句
         :param prompt: 为True则输出提示，否则不输出提示
+        :param args_tuple: 向sql语句中传递的参数
         :return:
         """
         # TODO: 执行无需调用commit方法的sql语句
         try:
-            self.__conn_cursor.execute(sentence)
+            self.__conn_cursor.execute(sentence, args_tuple)
             if prompt:
                 print("[√] 执行成功")
         except:
@@ -56,15 +57,16 @@ class Db(Config):
         except:
             return None
 
-    def need_commit_sql(self, sentence, prompt=True):
+    def need_commit_sql(self, sentence, args_tuple=None, prompt=True):
         """
-        :param sentence: 需执行的sql语句
+        :param sentence: 需执行的sql语句的模板
         :param prompt: 为True则输出提示，否则不输出提示
+        :param args_tuple: 向sql语句中传递的参数
         :return:
         """
         # TODO: 执行需要调用commit方法的sql语句
         try:
-            self.__conn_cursor.execute(sentence)
+            self.__conn_cursor.execute(sentence, args_tuple)
             self.__conn.commit()
             if prompt:
                 print("[√] 执行成功")
@@ -96,15 +98,15 @@ class Db(Config):
         create_articles = """
         create table articles(
         id int(5) not null auto_increment,
-        title varchar(20) not null,
-        author varchar(10),
+        title varchar(400) not null,
+        author varchar(100),
         primary key (id)
         )
         """
         create_tags = """
         create table tags(
         id int(5) not null auto_increment,
-        tag_name varchar(20) not null,
+        tag_name varchar(100) not null,
         belong_to int(5) not null,
         primary key (id)
         )
@@ -112,7 +114,7 @@ class Db(Config):
         create_categories = """
         create table categories(
         id int(5) not null auto_increment,
-        category_name varchar(20) not null,
+        category_name varchar(100) not null,
         belong_to int(5) not null,
         primary key (id)
         )
@@ -144,6 +146,7 @@ class Db(Config):
         file_count = 0
         item_count = 1  # 用于显示插入文件的进度
         for each_item in md_attribute_items:
+            print("==================> 正在处理{}".format(each_item['title']))
             title = each_item['title']
             author = each_item['author']
             tags = each_item['tags']
@@ -151,13 +154,13 @@ class Db(Config):
             insert_into_article = """
             insert into articles(title,author) 
             values(
-            '{title}','{author}'
+            %s,%s
             )
-            """.format(title=title, author=author)
+            """
             print("[*] 正在向articles表中插入第{item_count}个文件的信息....".format(item_count=item_count))
-            self.need_commit_sql(insert_into_article)
-            query_article_id = "select id from articles where title = '{title}'".format(title=title)
-            article_id_tuple = self.no_need_commit_sql(query_article_id, False)
+            self.need_commit_sql(insert_into_article, args_tuple=(title, author))
+            query_article_id = "select id from articles where title = %s"
+            article_id_tuple = self.no_need_commit_sql(query_article_id, args_tuple=(title,), prompt=False)
             try:
                 assert len(article_id_tuple) == 1
                 article_id = article_id_tuple[0][0]
@@ -169,20 +172,21 @@ class Db(Config):
                 insert_into_tags = """
                 insert into tags(tag_name,belong_to)
                 values(
-                '{tag_name}','{belong_to}'
+                %s,%s
                 )
-                """.format(tag_name=tag, belong_to=article_id)
-                self.need_commit_sql(insert_into_tags)
+                """
+                self.need_commit_sql(insert_into_tags, args_tuple=(tag, article_id))
             print("[*] 正在向categories表中插入第{item_count}个文件的信息....".format(item_count=item_count))
             for category in categories:
                 insert_into_categories = """
                 insert into categories(category_name,belong_to)
                 values(
-                '{category_name}','{belong_to}'
+                %s,%s
                 )
-                """.format(category_name=category, belong_to=article_id)
-                self.need_commit_sql(insert_into_categories)
+                """
+                self.need_commit_sql(insert_into_categories, args_tuple=(category, article_id))
             print("[√] 第{}个文件的内容已全部存入数据库".format(item_count))
+            item_count += 1
             file_count += 1
         print("[SUCCESS] 完成数据存储任务，本次共存储{}个文件的信息".format(file_count))
 
@@ -193,16 +197,16 @@ class Db(Config):
         tags_info_list = []
         categories_info_list = []
         get_articles = "select id,title,author from articles"
-        articles_data = self.no_need_commit_sql(get_articles, False)
+        articles_data = self.no_need_commit_sql(get_articles, prompt=False)
         for article in articles_data:
             article = list(article)
             article_id = article[0]
-            get_tags = "select tag_name from tags where belong_to = {}".format(article_id)
-            tags = self.no_need_commit_sql(get_tags, False)
+            get_tags = "select tag_name from tags where belong_to = %s"
+            tags = self.no_need_commit_sql(get_tags, args_tuple=(article_id,), prompt=False)
             for tag in tags:
                 tags_info_list.append(list(tag))
-            get_categories = "select category_name from categories where belong_to = {}".format(article_id)
-            categories = self.no_need_commit_sql(get_categories, False)
+            get_categories = "select category_name from categories where belong_to = %s"
+            categories = self.no_need_commit_sql(get_categories, args_tuple=(article_id,), prompt=False)
             for category in categories:
                 categories_info_list.append(list(category))
             total_info = {}  # 记录每个文章所有的属性
@@ -228,16 +232,16 @@ class Db(Config):
         all_files_path = self.get_all_md_path()
         if all_files_path == []:
             print('[×] 未检测到文件路径信息')
-            return
+            exit()
         # 如果数据库信息获取失败则退出
         if self.get_current_data() is False:
             print("[×] 获取数据库信息失败")
-            return
+            exit()
         print("[*] 正在备份原文件....")
         file_count = 0
         for md_file in all_files_path:
             try:
-                shutil.copy(md_file, md_file+".bak")
+                shutil.copy(md_file, "bak/" + md_file.split('\\')[-1] + ".bak")
                 print("[√] 备份{}成功！".format(md_file))
                 file_count += 1
             except:
@@ -245,26 +249,30 @@ class Db(Config):
                 return False
         print("[√] 文件备份已完成，本次共备份{}个文件".format(file_count))
         print("[*] 开始修改文件")
+        total_article = len(all_files_path)
+        current_article = 1
         for md_file in all_files_path:
-            print("[*] 开始执行对{}的操作".format(md_file))
+            # print("[*] 开始执行对{}的操作".format(md_file))
             try:
                 # 只读模式打开备份文件,为防止修改失败时损坏源文件，源文件将在后边打开
-                bak_file = open(md_file+'.bak', 'r', encoding='utf8')
+                # 这一部分主要是为了获取文章内容
+                bak_file_path = "bak/" + md_file.split('\\')[-1] + ".bak"
+                bak_file = open(bak_file_path, 'r', encoding='utf8')
             except:
-                print("[×] 打开{}失败".format(md_file+".bak"))
+                print("[{current}/{total}] 打开{fname}失败".format(current=current_article, total=total_article, fname=md_file+".bak"))
                 return False
             # 获取文章标题
             try:
-                title = re.search(title_pattern, bak_file.readline()).group(2)
+                title = re.search(title_pattern, bak_file.readlines()[0]).group(2)
             except:
-                print("[×] 未找到{}的title字段，自动跳过该文件".format(md_file))
+                print("[{current}/{total}] 未找到{fname}的title字段，自动跳过该文件".format(current=current_article, total=total_article, fname=md_file))
                 continue
-            title_exist = False  # 标志该文件中的title是否存在于数据库中
+            title_exist = False  # 标志该文件中的title是否存在于数据库中，默认不存在
             # 遍历存储当前数据库文章信息的数组并将所有内容存储在changed_file_data中(只存储title,author,tags,categories)
             for article_info in self.__current_db_info_list:
                 # 如果文章中存在此title，则进行下一步操作，否则跳出该次循环
-                title_exist = True
                 if article_info['title'] == title:
+                    title_exist = True
                     # 添加title
                     changed_file_data += "title: {}\n".format(article_info['title'])
                     # 添加author
@@ -277,6 +285,10 @@ class Db(Config):
                     changed_file_data += "categories:\n"
                     for category in article_info['categories']:
                         changed_file_data += "  - {}\n".format(category[0])
+            # 如果数据库中没有该文件的title，则终止程序
+            if not title_exist:
+                print("[{current}/{total}] 在数据库中没有找到{fname}的相关信息".format(current=current_article, total=total_article, fname=md_file))
+                break
             origin_attribute_end = False  # 标志源文件属性部分是否结束，默认未结束
             store_other_attribute = False  # 标志源文件其他属性部分是否已存储，默认未存储
             # 遍历备份文件中的内容，获取其他标签
@@ -309,19 +321,25 @@ class Db(Config):
                 changed_file_data += line
             # 关闭备份文件
             bak_file.close()
+            # print(changed_file_data)  # 测试用
+            # exit()  # 测试用
             # 打开源文件
             try:
                 origin_file = open(md_file, 'w', encoding='utf8')
             except:
-                print("[×] 打开{}失败".format(md_file))
+                print("[{current}/{total}] 打开{fname}失败".format(current=current_article, total=total_article, fname=md_file))
                 return False
             # 写入内容
             try:
                 origin_file.write(changed_file_data)
             except:
-                print("[×] 更改{}失败".format(md_file))
+                print("[{current}/{total}] 更改{fname}失败".format(current=current_article, total=total_article, fname=md_file))
             origin_file.close()
-            print('[√] 已完成对{}的更改'.format(md_file))
-            if not title_exist:
-                print("[×] 在数据库中没有找到该文章的相关信息")
+            print('[{current}/{total}] 已完成对{fname}的更改'.format(current=current_article, total=total_article, fname=md_file))
+            # if not title_exist:
+            #     print("[{current}/{total}] 在数据库中没有找到该文章的相关信息".format(current=current_article, total=total_article))
+            origin_file.close()
+            # print(changed_file_data)  # 测试用
+            current_article += 1
+            changed_file_data = ""
         print("[SUCCESS] 所有文件均已处理完毕")

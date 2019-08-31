@@ -43,7 +43,7 @@ class Config(object):
             config_data = open("./config/config.ini").readlines()
         except :
             print("[×] 打开配置文件失败")
-            return
+            exit()
         for line in config_data:
             key = re.search(pattern, line).group(1)
             value = re.search(pattern, line).group(2)
@@ -53,6 +53,7 @@ class Config(object):
             print("[√] 获取配置文件成功")
         else:
             print("[×] 获取配置文件异常")
+            exit()
 
     def __match_md_path(self):
         # TODO: 获取指定文件夹下所有.md文件的的绝对路径
@@ -119,17 +120,18 @@ class Config(object):
             md_attributes_list.append(["categories", categories])
             md_attributes_dict = dict(md_attributes_list)
             if md_attributes_dict is not {}:
-                print("[√] 扫描{}文件成功".format(file_path))
+                print("[√] 成功获取 [{}] 的属性".format(file_path))
                 return md_attributes_dict
             else:
-                print("[×] 扫描{}出现异常".format(file_path))
+                print("[×] 获取 [{}] 的属性失败".format(file_path))
         else:
             print("[!] 文件{}无title字段，自动跳过".format(file_path))
 
     def __collect_all_md_attribute(self):
         # TODO: 通过遍历每个md文件来获取md文件中的属性
+        print("[*] 正在获取所有md文件的属性...")
         for file_path in self.__files_path_list:
-            print("[*] 正在扫描{}".format(file_path))
+            # print("[*] 正在扫描{}".format(file_path))
             md_attribute_res = self.__match_md_attribute(file_path)
             if md_attribute_res is not None:
                 self.__files_all_attribute_list.append(md_attribute_res)
